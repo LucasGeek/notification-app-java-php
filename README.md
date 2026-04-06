@@ -1,61 +1,146 @@
+# notification-app-java-php
 
-# Projeto API - Java e PHP
+Duas implementações da mesma API REST de notificações — uma em **Java (Spring Boot)** e outra em **PHP (Laravel)** — compartilhando a mesma rede Docker e estrutura de endpoints.
 
-## Descrição
+## Estrutura
 
-Este repositório contém dois projetos de API distintos, um desenvolvido em **Java** e outro em **PHP**, cada um utilizando as melhores práticas e padrões de suas respectivas linguagens e frameworks.
+```
+.
+├── docker-compose.yml       # Orquestração unificada
+├── api/
+│   ├── java/                # Spring Boot + PostgreSQL
+│   └── php/                 # Laravel + PostgreSQL
+```
 
-### Projeto Java
+## Como executar
 
-O projeto de API em Java foi desenvolvido utilizando a **Arquitetura Limpa (Clean Architecture)**, princípios do **SOLID** e **Domain-Driven Design (DDD)**. Esses conceitos garantem a escalabilidade, facilidade de manutenção e testabilidade do sistema, além de uma separação clara entre as camadas de negócio, aplicação e infraestrutura.
+### Pré-requisitos
 
-### Projeto PHP
+- Docker
+- Docker Compose v2+
 
-O projeto de API em PHP foi desenvolvido com o framework **Laravel**, seguindo os padrões e convenções oferecidos pelo próprio framework. O Laravel facilita o desenvolvimento rápido, seguro e eficiente de APIs, com suporte a recursos como autenticação, rotas, migrações e muito mais.
+### Subir o ambiente completo
 
-## Docker
+```bash
+docker compose up --build
+```
 
-Ambos os projetos possuem arquivos `Dockerfile` e `docker-compose.yml` para facilitar a execução e configuração dos ambientes. Com o Docker, você pode levantar o ambiente de desenvolvimento ou produção rapidamente, sem necessidade de instalar as dependências diretamente no sistema.
+Isso irá:
+- Construir as imagens das duas APIs
+- Subir dois bancos PostgreSQL isolados
+- Executar as migrations automaticamente (PHP/Laravel)
+- Criar as tabelas via JPA (Java/Spring Boot)
+- Expor as aplicações na rede `notification-app-network`
 
-### Como executar
+### Endpoints disponíveis
 
-#### Passos para ambos os projetos:
+| Serviço             | Host                       | Swagger UI                              |
+|---------------------|----------------------------|-----------------------------------------|
+| Java (Spring Boot)  | `http://localhost:8080`    | `/swagger-ui/index.html`                |
+| PHP (Laravel)       | `http://localhost:8002`    | `/api/documentation`                    |
+| PostgreSQL (Java)   | `localhost:5434`           | —                                       |
+| PostgreSQL (PHP)    | `localhost:5433`           | —                                       |
 
-1. Certifique-se de ter o Docker e o Docker Compose instalados na sua máquina.
-2. Clone o repositório para a sua máquina.
-3. Acesse a pasta do projeto desejado (Java ou PHP).
-4. Execute o comando a seguir para iniciar os containers:
+> As portas do host podem variar se houver conflito com outros serviços locais. Ajuste o `docker-compose.yml` conforme necessário.
 
-   ```bash
-   docker-compose up --build
-   ```
+## API
 
-5. Após o processo de build e subida dos containers, a API estará disponível para uso.
+Ambas as APIs expõem os mesmos recursos com a mesma estrutura de rotas:
 
-## Estrutura dos Projetos
+### Autenticação
 
-### API - Java
+| Método | Rota            | Descrição              | Auth |
+|--------|-----------------|------------------------|------|
+| POST   | `/api/register` | Cadastrar usuário      | —    |
+| POST   | `/api/login`    | Autenticar e obter JWT | —    |
+| GET    | `/api/me`       | Perfil do usuário      | ✓    |
 
-- **Camada de Api**: Controladores que recebem as requisições HTTP.
-- **Camada de Application**: Contém os casos de uso (application services) e orquestra as operações de negócio.
-- **Camada de Domain**: Contém as entidades de domínio e as regras de negócio essenciais.
-- **Camada de Infrastructure**: Implementa a persistência de dados e serviços externos, como integração com APIs ou bancos de dados.
+### Tipos de Notificação
 
-### API - PHP (Laravel)
+| Método | Rota                       | Descrição                  | Auth |
+|--------|----------------------------|----------------------------|------|
+| POST   | `/api/type/create`         | Criar tipo                 | ✓    |
+| GET    | `/api/type/me`             | Listar tipos do usuário    | ✓    |
+| PUT    | `/api/type/update/{id}`    | Atualizar tipo             | ✓    |
+| DELETE | `/api/type/delete/{id}`    | Remover tipo               | ✓    |
 
-- **Routes**: Definição das rotas e endpoints da API.
-- **Controllers**: Controladores responsáveis por receber as requisições e retornar as respostas apropriadas.
-- **Models**: Representam as entidades e a lógica de negócio da aplicação.
-- **Migrations**: Gerenciamento da estrutura do banco de dados, com versionamento de alterações.
+### Notificações
 
-## Contribuição
+| Método | Rota                        | Descrição                        | Auth |
+|--------|-----------------------------|----------------------------------|------|
+| POST   | `/api/news/create`          | Criar notificação                | ✓    |
+| GET    | `/api/news/me`              | Listar notificações do usuário   | ✓    |
+| GET    | `/api/news/type/{typeId}`   | Filtrar por tipo                 | ✓    |
+| PUT    | `/api/news/update/{id}`     | Atualizar notificação            | ✓    |
+| DELETE | `/api/news/delete/{id}`     | Remover notificação              | ✓    |
 
-1. Faça um fork do projeto.
-2. Crie uma branch para a sua feature (`git checkout -b minha-feature`).
-3. Faça commit das suas alterações (`git commit -am 'Adiciona nova feature'`).
-4. Faça push para a branch (`git push origin minha-feature`).
-5. Abra um Pull Request.
+### Campos das requisições
 
-## Licença
+**Register**
+```json
+{ "nome": "João", "sobrenome": "Silva", "email": "joao@email.com", "senha": "min8chars" }
+```
+> PHP usa `password` no lugar de `senha`
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+**Login**
+```json
+{ "email": "joao@email.com", "senha": "min8chars" }
+```
+> PHP usa `password` no lugar de `senha`
+
+**Tipo de Notificação**
+```json
+{ "nomeTipo": "Alertas de Sistema" }
+```
+
+**Atualizar Tipo**
+```json
+{ "novoNomeTipo": "Novo Nome" }
+```
+
+**Notificação**
+```json
+{
+  "typeId": "<uuid ou integer>",
+  "titulo": "Título",
+  "descricao": "Resumo",
+  "corpo": "Conteúdo completo",
+  "imagemDestaque": "https://exemplo.com/img.png"
+}
+```
+> `typeId` é UUID na API Java e inteiro na API PHP. `imagemDestaque` é opcional.
+
+### Autenticação JWT
+
+O token é retornado como string pura no corpo da resposta. Todas as rotas protegidas exigem o header:
+
+```
+Authorization: Bearer <token>
+```
+
+## Arquitetura
+
+### Java (Spring Boot)
+- **Clean Architecture** com separação em camadas: `api`, `application`, `domain`, `infrastructure`
+- Spring Security + JWT (`jjwt`)
+- Spring Data JPA + PostgreSQL
+- Documentação via SpringDoc OpenAPI
+
+### PHP (Laravel)
+- Arquitetura MVC com Repository Pattern
+- Autenticação JWT via `tymon/jwt-auth`
+- Eloquent ORM + PostgreSQL
+- Documentação via L5-Swagger
+
+## Variáveis de ambiente
+
+As variáveis já estão pré-configuradas no `docker-compose.yml` para desenvolvimento local. Para produção, ajuste:
+
+| Variável                     | Padrão         | Descrição                  |
+|------------------------------|----------------|----------------------------|
+| `SPRING_DATASOURCE_URL`      | postgres-java  | JDBC URL do banco Java     |
+| `SPRING_DATASOURCE_PASSWORD` | postgres       | Senha do banco Java        |
+| `DB_HOST`                    | postgres-php   | Host do banco PHP          |
+| `DB_PASSWORD`                | postgres       | Senha do banco PHP         |
+| `JWT_SECRET`                 | (definido)     | Chave JWT da API PHP       |
+| `security.jwt.secret`        | (definido)     | Chave JWT da API Java      |
