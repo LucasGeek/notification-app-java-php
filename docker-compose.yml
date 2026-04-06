@@ -1,0 +1,113 @@
+name: notification-app
+
+networks:
+  notification-app-network:
+    driver: bridge
+
+volumes:
+  postgres-java-data:
+  postgres-php-data:
+
+services:
+
+  # ─── PostgreSQL — Java API ───────────────────────────────────────────────────
+  postgres-java:
+    image: postgres:13-alpine
+    container_name: postgres-java
+    environment:
+      POSTGRES_DB: notification
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-java-data:/var/lib/postgresql/data
+    networks:
+      - notification-app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Java Spring Boot API — 0.0.0.0:8080 ────────────────────────────────────
+  notification-app-java:
+    build:
+      context: ./api/java
+      dockerfile: Dockerfile
+    container_name: notification-app-java
+    depends_on:
+      postgres-java:
+        condition: service_healthy
+    environment:
+      SERVER_ADDRESS: "0.0.0.0"
+      SERVER_PORT: "8080"
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-java:5432/notification"
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    ports:
+      - "8080:8080"
+    networks:
+      - notification-app-network
+    restart: unless-stopped
+
+  # ─── PostgreSQL — PHP API ────────────────────────────────────────────────────
+  postgres-php:
+    image: postgres:13-alpine
+    container_name: postgres-php
+    environment:
+      POSTGRES_DB: notification
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"           # host 5433 para evitar conflito com postgres-java
+    volumes:
+      - postgres-php-data:/var/lib/postgresql/data
+    networks:
+      - notification-app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── PHP Laravel API — 0.0.0.0:8000 (Apache Listen 0.0.0.0:80) ─────────────
+  notification-app-php:
+    build:
+      context: ./api/php
+      dockerfile: Dockerfile
+    container_name: notification-app-php
+    depends_on:
+      postgres-php:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: "base64:YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY="
+      APP_URL: "http://localhost:8000"
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres-php
+      DB_PORT: "5432"
+      DB_DATABASE: notification
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: "n4N0jF2Ea0itn42muDVMRSi19GkdXZ9UAdlxDPvgdouTc6wushgaIyoIl7te1ijT"
+      L5_SWAGGER_GENERATE_ALWAYS: "true"
+      L5_SWAGGER_CONST_HOST: "http://127.0.0.1:8002"
+    volumes:
+      - ./api/php:/var/www/html
+    ports:
+      - "8002:80"
+    networks:
+      - notification-app-network
+    command: >
+      sh -c "
+        cd /var/www/html &&
+        chown -R www-data:www-data storage bootstrap/cache &&
+        composer install --no-interaction --prefer-dist &&
+        php artisan migrate --force &&
+        apache2-foreground
+      "
